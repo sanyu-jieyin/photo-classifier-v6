@@ -145,7 +145,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
     /**
      * 静默刷新：操作后自动重新扫描，保持列表最新，避免空图/重复
      */
-    private fun refreshPhotos(silent: Boolean = true) {
+    fun refreshPhotos(silent: Boolean = true) {
         val uri = sourceFolderUri ?: return
         val mode = _sortMode.value
         viewModelScope.launch {
@@ -191,7 +191,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
         val targetUri = slot.folderItem?.uri ?: return
         val srcUri = sourceFolderUri ?: return
 
-        // 1. 立刻从本地列表移除，UI 瞬间响应
+        // 立刻从本地列表移除，UI 零延迟
         val mutable = _photos.value.toMutableList()
         mutable.removeAt(currentIdx)
         _photos.value = mutable
@@ -209,12 +209,10 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                     slot.folderItem.name, srcUri, targetUri
                 )
                 _toastMessage.value = "已移动到「${slot.folderItem.name}」"
-                // 2. 后台静默刷新，确保和文件系统一致
-                refreshPhotos(silent = true)
             } else {
                 // 移动失败，把照片加回来
                 val restore = _photos.value.toMutableList()
-                restore.add(currentIdx, photo)
+                restore.add(currentIdx.coerceAtMost(restore.size), photo)
                 _photos.value = restore
                 _currentIndex.value = currentIdx
                 _toastMessage.value = "移动失败（可能目标文件夹已有同名文件）"
@@ -232,7 +230,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
         val photo = _photos.value.getOrNull(currentIdx) ?: return
         val srcUri = sourceFolderUri ?: return
 
-        // 1. 立刻从本地列表移除，UI 瞬间响应
+        // 立刻从本地列表移除，UI 零延迟
         val mutable = _photos.value.toMutableList()
         mutable.removeAt(currentIdx)
         _photos.value = mutable
@@ -267,13 +265,11 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                         photo, currentIdx, srcUri, cacheFile
                     )
                     _toastMessage.value = "已删除"
-                    // 2. 后台静默刷新
-                    refreshPhotos(silent = true)
                 } else {
                     cacheFile.delete()
                     // 删除失败，把照片加回来
                     val restore = _photos.value.toMutableList()
-                    restore.add(currentIdx, photo)
+                    restore.add(currentIdx.coerceAtMost(restore.size), photo)
                     _photos.value = restore
                     _currentIndex.value = currentIdx
                     _toastMessage.value = "删除失败"
@@ -281,7 +277,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
             } else {
                 // 备份失败，把照片加回来
                 val restore = _photos.value.toMutableList()
-                restore.add(currentIdx, photo)
+                restore.add(currentIdx.coerceAtMost(restore.size), photo)
                 _photos.value = restore
                 _currentIndex.value = currentIdx
                 _toastMessage.value = "删除失败（无法备份）"
@@ -315,8 +311,13 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                             )
                         }
                         if (restoredUri != null) {
+                            // 撤销成功，本地加回来
+                            val mutable = _photos.value.toMutableList()
+                            val insertIndex = minOf(lastAction.fromIndex, mutable.size)
+                            mutable.add(insertIndex, PhotoItem(restoredUri, lastAction.photoName, lastAction.photoMimeType))
+                            _photos.value = mutable
+                            _currentIndex.value = insertIndex
                             _toastMessage.value = "已撤销移动"
-                            refreshPhotos(silent = true)
                         } else {
                             _toastMessage.value = "撤销失败"
                         }
@@ -344,6 +345,11 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                                     input.copyTo(output)
                                 }
                             }
+                            val mutable = _photos.value.toMutableList()
+                            val insertIndex = minOf(lastAction.fromIndex, mutable.size)
+                            mutable.add(insertIndex, PhotoItem(newFile.uri, lastAction.photo.name, lastAction.photo.mimeType))
+                            _photos.value = mutable
+                            _currentIndex.value = insertIndex
                             cacheFile.delete()
                             true
                         } catch (e: Exception) {
@@ -351,12 +357,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                             false
                         }
                     }
-                    if (success) {
-                        _toastMessage.value = "已撤销删除"
-                        refreshPhotos(silent = true)
-                    } else {
-                        _toastMessage.value = "撤销失败"
-                    }
+                    _toastMessage.value = if (success) "已撤销删除" else "撤销失败"
                 }
             }
         }

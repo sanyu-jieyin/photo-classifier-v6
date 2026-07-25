@@ -248,6 +248,16 @@ fun PhotoClassifierApp() {
                     }
                 },
                 actions = {
+                    // 手动刷新
+                    if (photos.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.refreshPhotos(silent = false) }) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "刷新列表",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     // 排序切换
                     if (photos.isNotEmpty()) {
                         IconButton(onClick = {
