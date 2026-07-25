@@ -33,7 +33,8 @@ sealed class UndoAction {
         val slotIndex: Int,
         val slotName: String,
         val sourceFolderUri: Uri,
-        val targetFolderUri: Uri
+        val targetFolderUri: Uri,
+        val movedUri: Uri? = null  // 记录移动后的新 URI，撤销时直接用
     ) : UndoAction()
 
     data class Delete(
@@ -206,7 +207,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
             if (newUri != null) {
                 _undoStack.value = _undoStack.value + UndoAction.Move(
                     photo.name, photo.mimeType, currentIdx, slotIndex,
-                    slot.folderItem.name, srcUri, targetUri
+                    slot.folderItem.name, srcUri, targetUri, newUri
                 )
                 _toastMessage.value = "已移动到「${slot.folderItem.name}」"
             } else {
@@ -298,20 +299,17 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
         viewModelScope.launch {
             when (lastAction) {
                 is UndoAction.Move -> {
-                    val targetTree = DocumentFile.fromTreeUri(context, lastAction.targetFolderUri)
-                    val movedFile = targetTree?.listFiles()?.find { it.name == lastAction.photoName }
-
-                    if (movedFile != null) {
+                    val movedUri = lastAction.movedUri
+                    if (movedUri != null) {
                         val restoredUri = withContext(Dispatchers.IO) {
                             fileHelper.movePhoto(
-                                movedFile.uri,
+                                movedUri,
                                 lastAction.targetFolderUri,
                                 lastAction.sourceFolderUri,
                                 lastAction.photoName
                             )
                         }
                         if (restoredUri != null) {
-                            // 撤销成功，本地加回来
                             val mutable = _photos.value.toMutableList()
                             val insertIndex = minOf(lastAction.fromIndex, mutable.size)
                             mutable.add(insertIndex, PhotoItem(restoredUri, lastAction.photoName, lastAction.photoMimeType))
@@ -322,7 +320,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                             _toastMessage.value = "撤销失败"
                         }
                     } else {
-                        _toastMessage.value = "撤销失败（找不到文件）"
+                        _toastMessage.value = "撤销失败（无记录）"
                     }
                 }
                 is UndoAction.Delete -> {

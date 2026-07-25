@@ -546,39 +546,47 @@ fun PhotoGallery(
                     .padding(horizontal = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
+                val currentPhotoKey = remember(currentIndex, photos.size) {
+                    photos.getOrNull(currentIndex)?.name ?: ""
+                }
                 AnimatedContent(
-                    targetState = currentIndex,
+                    targetState = Pair(currentIndex, currentPhotoKey),
                     transitionSpec = {
-                        val direction = if (targetState > initialState) 1 else -1
+                        val direction = if (targetState.first > initialState.first) 1 else -1
                         (slideInHorizontally { width -> direction * width } + fadeIn(animationSpec = tween(250))) togetherWith
                         (slideOutHorizontally { width -> -direction * width } + fadeOut(animationSpec = tween(250)))
                     },
                     label = "photo_slide"
-                ) { index ->
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(photos[index].uri)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "当前图片",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(24.dp))
-                            .alpha(if (isDragging) 0.18f else 1f)
-                            .scale(if (isDragging) 0.94f else 1f)
-                            .shadow(if (isDragging) 2.dp else 8.dp, RoundedCornerShape(24.dp))
-                            .onGloballyPositioned { coordinates: LayoutCoordinates ->
-                                val pos = coordinates.positionInRoot()
-                                val size = coordinates.size
-                                onImageCenterChange(
-                                    Offset(
-                                        pos.x + size.width / 2f,
-                                        pos.y + size.height / 2f
+                ) { (index, _) ->
+                    val photoUri = photos[index].uri
+                    // 强制重新创建 AsyncImage，确保 URI 变化时 Coil 重新加载
+                    key(photoUri.toString()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(photoUri)
+                                .crossfade(true)
+                                .memoryCacheKey(photoUri.toString())
+                                .build(),
+                            contentDescription = "当前图片",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(24.dp))
+                                .alpha(if (isDragging) 0.18f else 1f)
+                                .scale(if (isDragging) 0.94f else 1f)
+                                .shadow(if (isDragging) 2.dp else 8.dp, RoundedCornerShape(24.dp))
+                                .onGloballyPositioned { coordinates: LayoutCoordinates ->
+                                    val pos = coordinates.positionInRoot()
+                                    val size = coordinates.size
+                                    onImageCenterChange(
+                                        Offset(
+                                            pos.x + size.width / 2f,
+                                            pos.y + size.height / 2f
+                                        )
                                     )
-                                )
-                            },
-                        contentScale = ContentScale.Fit
-                    )
+                                },
+                            contentScale = ContentScale.Fit
+                        )
+                    }
                 }
 
                 if (isDragging) {
@@ -587,6 +595,7 @@ fun PhotoGallery(
                             .data(photos[currentIndex].uri)
                             .size(300, 400)
                             .crossfade(false)
+                            .memoryCacheKey(photos[currentIndex].uri.toString())
                             .build(),
                         contentDescription = null,
                         modifier = Modifier
