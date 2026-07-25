@@ -85,6 +85,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
         restoreSlots()
     }
 
+    // ===== 槽位记忆 =====
     private fun saveSlots() {
         val editor = prefs.edit()
         _slots.value.forEachIndexed { index, slot ->
@@ -135,13 +136,16 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
             }
         }
     }
-
     fun setSortMode(mode: SortMode) {
         if (_sortMode.value == mode) return
         sourceFolderUri?.let { loadSourceFolder(it, mode) }
     }
 
-    fun refreshPhotos(silent: Boolean = false) {
+
+    /**
+     * 静默刷新：操作后自动重新扫描，保持列表最新，避免空图/重复
+     */
+    fun refreshPhotos(silent: Boolean = true) {
         val uri = sourceFolderUri ?: return
         val mode = _sortMode.value
         viewModelScope.launch {
@@ -151,6 +155,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                 fileHelper.getPhotosFromFolder(uri, mode)
             }
 
+            // 尽量保持当前位置：找同名文件，找不到就保持当前索引
             val currentPhoto = _photos.value.getOrNull(_currentIndex.value)
             val newIndex = if (currentPhoto != null) {
                 val idx = list.indexOfFirst { it.name == currentPhoto.name && it.lastModified == currentPhoto.lastModified }
@@ -306,6 +311,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                             )
                         }
                         if (restoredUri != null) {
+                            // 撤销成功，本地加回来
                             val mutable = _photos.value.toMutableList()
                             val insertIndex = minOf(lastAction.fromIndex, mutable.size)
                             mutable.add(insertIndex, PhotoItem(restoredUri, lastAction.photoName, lastAction.photoMimeType))
