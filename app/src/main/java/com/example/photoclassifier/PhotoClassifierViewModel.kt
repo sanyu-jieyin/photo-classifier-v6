@@ -141,6 +141,30 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
         sourceFolderUri?.let { loadSourceFolder(it, mode) }
     }
 
+    fun refreshPhotos(silent: Boolean = false) {
+        val uri = sourceFolderUri ?: return
+        val mode = _sortMode.value
+        viewModelScope.launch {
+            if (!silent) _isLoading.value = true
+
+            val list = withContext(Dispatchers.IO) {
+                fileHelper.getPhotosFromFolder(uri, mode)
+            }
+
+            val currentPhoto = _photos.value.getOrNull(_currentIndex.value)
+            val newIndex = if (currentPhoto != null) {
+                val idx = list.indexOfFirst { it.name == currentPhoto.name && it.lastModified == currentPhoto.lastModified }
+                if (idx >= 0) idx else minOf(_currentIndex.value, list.size - 1).coerceAtLeast(0)
+            } else {
+                minOf(_currentIndex.value, list.size - 1).coerceAtLeast(0)
+            }
+
+            _photos.value = list
+            _currentIndex.value = if (list.isEmpty()) 0 else newIndex
+            if (!silent) _isLoading.value = false
+        }
+    }
+
     fun setSlotFolder(slotIndex: Int, folder: FolderItem) {
         _slots.value = _slots.value.map {
             if (it.index == slotIndex) it.copy(folderItem = folder) else it
