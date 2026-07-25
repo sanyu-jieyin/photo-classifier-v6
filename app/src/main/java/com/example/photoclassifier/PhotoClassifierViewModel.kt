@@ -136,6 +136,11 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
             }
         }
     }
+    fun setSortMode(mode: SortMode) {
+        if (_sortMode.value == mode) return
+        sourceFolderUri?.let { loadSourceFolder(it, mode) }
+    }
+
 
     /**
      * 静默刷新：操作后自动重新扫描，保持列表最新，避免空图/重复
