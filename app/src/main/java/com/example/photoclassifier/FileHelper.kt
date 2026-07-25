@@ -66,7 +66,8 @@ class FileHelper(private val context: Context) {
         sourceUri: Uri,
         sourceFolderUri: Uri,
         targetFolderUri: Uri,
-        fileName: String
+        fileName: String,
+        allowRename: Boolean = false
     ): Uri? {
         return withContext(Dispatchers.IO) {
             // ===== 方法1: moveDocument（真正的移动，O(1)，保留所有元数据）=====
