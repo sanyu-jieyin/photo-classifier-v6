@@ -109,6 +109,9 @@ fun PhotoClassifierApp() {
         }
     }
 
+    var pendingSourceUri by remember { mutableStateOf<Uri?>(null) }
+    var showSortDialog by remember { mutableStateOf(false) }
+
     val sourceLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -118,7 +121,8 @@ fun PhotoClassifierApp() {
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
-                viewModel.loadSourceFolder(uri)
+                pendingSourceUri = uri
+                showSortDialog = true
             }
         }
     }
@@ -168,6 +172,49 @@ fun PhotoClassifierApp() {
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissDeleteConfirm() }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showSortDialog && pendingSourceUri != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showSortDialog = false
+                pendingSourceUri = null
+            },
+            title = { Text("加载方式") },
+            text = { Text("该文件夹图片较多，请选择加载方式：") },
+            confirmButton = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick = {
+                            pendingSourceUri?.let { viewModel.loadSourceFolder(it, SortMode.NEWEST_FIRST) }
+                            showSortDialog = false
+                            pendingSourceUri = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("加载最新 500 张（从新到旧）")
+                    }
+                    TextButton(
+                        onClick = {
+                            pendingSourceUri?.let { viewModel.loadSourceFolder(it, SortMode.OLDEST_FIRST) }
+                            showSortDialog = false
+                            pendingSourceUri = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("加载最早 500 张（从旧到新）")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showSortDialog = false
+                    pendingSourceUri = null
+                }) {
                     Text("取消")
                 }
             }
