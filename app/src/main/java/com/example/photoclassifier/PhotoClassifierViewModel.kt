@@ -306,7 +306,8 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                                 movedUri,
                                 lastAction.targetFolderUri,
                                 lastAction.sourceFolderUri,
-                                lastAction.photoName
+                                lastAction.photoName,
+                                allowRename = true  // 撤销时允许重命名，确保成功
                             )
                         }
                         if (restoredUri != null) {
