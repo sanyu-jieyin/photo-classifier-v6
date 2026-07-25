@@ -33,8 +33,7 @@ sealed class UndoAction {
         val slotIndex: Int,
         val slotName: String,
         val sourceFolderUri: Uri,
-        val targetFolderUri: Uri,
-        val movedUri: Uri? = null  // 记录移动后的新 URI，撤销时直接用
+        val targetFolderUri: Uri
     ) : UndoAction()
 
     data class Delete(
@@ -86,7 +85,6 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
         restoreSlots()
     }
 
-    // ===== 槽位记忆 =====
     private fun saveSlots() {
         val editor = prefs.edit()
         _slots.value.forEachIndexed { index, slot ->
@@ -137,38 +135,10 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
             }
         }
     }
+
     fun setSortMode(mode: SortMode) {
         if (_sortMode.value == mode) return
         sourceFolderUri?.let { loadSourceFolder(it, mode) }
-    }
-
-
-    /**
-     * 静默刷新：操作后自动重新扫描，保持列表最新，避免空图/重复
-     */
-    fun refreshPhotos(silent: Boolean = true) {
-        val uri = sourceFolderUri ?: return
-        val mode = _sortMode.value
-        viewModelScope.launch {
-            if (!silent) _isLoading.value = true
-
-            val list = withContext(Dispatchers.IO) {
-                fileHelper.getPhotosFromFolder(uri, mode)
-            }
-
-            // 尽量保持当前位置：找同名文件，找不到就保持当前索引
-            val currentPhoto = _photos.value.getOrNull(_currentIndex.value)
-            val newIndex = if (currentPhoto != null) {
-                val idx = list.indexOfFirst { it.name == currentPhoto.name && it.lastModified == currentPhoto.lastModified }
-                if (idx >= 0) idx else minOf(_currentIndex.value, list.size - 1).coerceAtLeast(0)
-            } else {
-                minOf(_currentIndex.value, list.size - 1).coerceAtLeast(0)
-            }
-
-            _photos.value = list
-            _currentIndex.value = if (list.isEmpty()) 0 else newIndex
-            if (!silent) _isLoading.value = false
-        }
     }
 
     fun setSlotFolder(slotIndex: Int, folder: FolderItem) {
@@ -207,7 +177,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
             if (newUri != null) {
                 _undoStack.value = _undoStack.value + UndoAction.Move(
                     photo.name, photo.mimeType, currentIdx, slotIndex,
-                    slot.folderItem.name, srcUri, targetUri, newUri
+                    slot.folderItem.name, srcUri, targetUri
                 )
                 _toastMessage.value = "已移动到「${slot.folderItem.name}」"
             } else {
@@ -299,15 +269,16 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
         viewModelScope.launch {
             when (lastAction) {
                 is UndoAction.Move -> {
-                    val movedUri = lastAction.movedUri
-                    if (movedUri != null) {
+                    val targetTree = DocumentFile.fromTreeUri(context, lastAction.targetFolderUri)
+                    val movedFile = targetTree?.listFiles()?.find { it.name == lastAction.photoName }
+
+                    if (movedFile != null) {
                         val restoredUri = withContext(Dispatchers.IO) {
                             fileHelper.movePhoto(
-                                movedUri,
+                                movedFile.uri,
                                 lastAction.targetFolderUri,
                                 lastAction.sourceFolderUri,
-                                lastAction.photoName,
-                                allowRename = true  // 撤销时允许重命名，确保成功
+                                lastAction.photoName
                             )
                         }
                         if (restoredUri != null) {
@@ -321,7 +292,7 @@ class PhotoClassifierViewModel(application: Application) : AndroidViewModel(appl
                             _toastMessage.value = "撤销失败"
                         }
                     } else {
-                        _toastMessage.value = "撤销失败（无记录）"
+                        _toastMessage.value = "撤销失败（找不到文件）"
                     }
                 }
                 is UndoAction.Delete -> {
